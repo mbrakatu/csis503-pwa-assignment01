@@ -171,9 +171,33 @@ async function saveSettings() {
 /* -----------------------------
    LOCATION SEARCH
 ----------------------------- */
-
 async function findLocation(place) {
 
+  // If the user entered a 5-digit U.S. ZIP code
+  if (/^\d{5}$/.test(place)) {
+
+    const zipResponse =
+      await fetch(
+        "https://api.zippopotam.us/us/" +
+        encodeURIComponent(place)
+      );
+
+    if (!zipResponse.ok) {
+      throw new Error("ZIP code not found.");
+    }
+
+    const zipData = await zipResponse.json();
+    const result = zipData.places[0];
+
+    return {
+      name: result["place name"],
+      admin1: result["state"],
+      latitude: Number(result["latitude"]),
+      longitude: Number(result["longitude"])
+    };
+  }
+
+  // Otherwise search by city name
   const url =
     "https://geocoding-api.open-meteo.com/v1/search" +
     "?name=" + encodeURIComponent(place) +
@@ -192,7 +216,6 @@ async function findLocation(place) {
   }
 
   return data.results[0];
-
 }
 
 
