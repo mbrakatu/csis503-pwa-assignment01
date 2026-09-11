@@ -1,17 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>My Schedule</title>
-  <link rel="manifest" href="manifest.json" />
+
+  <link rel="manifest" href="manifest.json">
+
   <style>
     body {
       font-family: Arial, sans-serif;
-      max-width: 700px;
+      max-width: 750px;
       margin: 30px auto;
       padding: 20px;
       background: #f4f4f4;
+      color: #222;
     }
 
     h1 {
@@ -22,19 +26,23 @@
       background: white;
       padding: 20px;
       margin-bottom: 20px;
-      border-radius: 10px;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.08);
     }
 
     input, button {
       width: 100%;
-      padding: 10px;
+      padding: 11px;
       margin-top: 8px;
       margin-bottom: 12px;
       box-sizing: border-box;
+      border: 1px solid #bbb;
+      border-radius: 6px;
     }
 
     button {
       cursor: pointer;
+      font-weight: bold;
     }
 
     table {
@@ -45,77 +53,591 @@
 
     th, td {
       border: 1px solid #ccc;
-      padding: 8px;
+      padding: 9px;
       text-align: left;
+    }
+
+    th {
+      background: #eee;
+    }
+
+    .status {
+      font-size: 0.9rem;
+      color: #555;
     }
   </style>
 </head>
+
 <body>
 
-  <h1>My Schedule</h1>
+<h1>My Schedule</h1>
 
-  <div class="card">
-    <h2>Today's Weather</h2>
-    <p id="weather">Weather information will appear here.</p>
-  </div>
+<div class="card">
+  <h2>Today's Weather</h2>
+  <p id="weather">Enter a ZIP code or city and click Save Settings.</p>
+</div>
 
-  <div class="card">
-    <h2>Location Settings</h2>
+<div class="card">
 
-    <label for="location">ZIP Code or City</label>
-    <input id="location" type="text" placeholder="Example: 48710" />
+  <h2>Location Settings</h2>
 
-    <label for="calendar">Public Google Calendar ID</label>
-    <input id="calendar" type="text" placeholder="Enter calendar ID" />
+  <label for="location">ZIP Code or City</label>
 
-    <button onclick="saveSettings()">Save Settings</button>
-  </div>
+  <input
+    id="location"
+    type="text"
+    placeholder="Example: 48710 or Saginaw, Michigan"
+  >
 
-  <div class="card">
-    <h2>Schedule</h2>
+  <label for="calendar">Public Google Calendar ID</label>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Time</th>
-          <th>Temp</th>
-          <th>Event</th>
-        </tr>
-      </thead>
-      <tbody id="scheduleTable">
-        <tr>
-          <td>9:00 AM</td>
-          <td>--</td>
-          <td>Sample Event</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  <input
+    id="calendar"
+    type="text"
+    placeholder="Example: your-calendar-id@group.calendar.google.com"
+  >
 
-  <script>
-    function saveSettings() {
-      const location = document.getElementById("location").value;
-      const calendar = document.getElementById("calendar").value;
+  <button onclick="saveSettings()">
+    Save Settings
+  </button>
 
-      localStorage.setItem("location", location);
-      localStorage.setItem("calendar", calendar);
+  <p class="status" id="status"></p>
 
-      document.getElementById("weather").textContent =
-        "Settings saved for " + (location || "your location") + ".";
+</div>
+
+<div class="card">
+
+  <h2>Schedule</h2>
+
+  <table>
+
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Temp</th>
+        <th>Event</th>
+      </tr>
+    </thead>
+
+    <tbody id="scheduleTable">
+
+      <tr>
+        <td colspan="3">No schedule loaded yet.</td>
+      </tr>
+
+    </tbody>
+
+  </table>
+
+</div>
+
+<script>
+
+let hourlyWeather = [];
+
+
+/* -----------------------------
+   SAVE SETTINGS
+----------------------------- */
+
+async function saveSettings() {
+
+  const location =
+    document.getElementById("location").value.trim();
+
+  const calendar =
+    document.getElementById("calendar").value.trim();
+
+  localStorage.setItem("location", location);
+  localStorage.setItem("calendar", calendar);
+
+  document.getElementById("status").textContent =
+    "Loading weather and schedule...";
+
+  await loadWeather(location);
+
+  if (calendar) {
+    await loadCalendar(calendar);
+  } else {
+    showWeatherOnly();
+  }
+
+  document.getElementById("status").textContent =
+    "Settings saved.";
+
+}
+
+
+/* -----------------------------
+   LOCATION SEARCH
+----------------------------- */
+
+async function findLocation(place) {
+
+  const url =
+    "https://geocoding-api.open-meteo.com/v1/search" +
+    "?name=" + encodeURIComponent(place) +
+    "&count=1&language=en&format=json";
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error("Unable to search for location.");
+  }
+
+  const data = await response.json();
+
+  if (!data.results || data.results.length === 0) {
+    throw new Error("Location not found.");
+  }
+
+  return data.results[0];
+
+}
+
+
+/* -----------------------------
+   WEATHER
+----------------------------- */
+
+async function loadWeather(place) {
+
+  if (!place) {
+
+    document.getElementById("weather").textContent =
+      "Please enter a ZIP code or city.";
+
+    return;
+
+  }
+
+  try {
+
+    const location = await findLocation(place);
+
+    const latitude = location.latitude;
+    const longitude = location.longitude;
+
+    const weatherURL =
+      "https://api.open-meteo.com/v1/forecast" +
+      "?latitude=" + latitude +
+      "&longitude=" + longitude +
+      "&current=temperature_2m" +
+      "&hourly=temperature_2m" +
+      "&temperature_unit=fahrenheit" +
+      "&timezone=auto" +
+      "&forecast_days=1";
+
+    const response = await fetch(weatherURL);
+
+    if (!response.ok) {
+      throw new Error("Unable to load weather.");
     }
 
-    window.onload = function () {
-      document.getElementById("location").value =
-        localStorage.getItem("location") || "";
+    const data = await response.json();
 
-      document.getElementById("calendar").value =
-        localStorage.getItem("calendar") || "";
-    };
+    const temp = Math.round(data.current.temperature_2m);
 
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("service-worker.js");
+    document.getElementById("weather").textContent =
+      location.name +
+      (location.admin1 ? ", " + location.admin1 : "") +
+      ": " + temp + "°F";
+
+    hourlyWeather = [];
+
+    data.hourly.time.forEach((time, index) => {
+
+      hourlyWeather.push({
+        time: new Date(time),
+        temp: Math.round(data.hourly.temperature_2m[index])
+      });
+
+    });
+
+  }
+
+  catch (error) {
+
+    console.error(error);
+
+    document.getElementById("weather").textContent =
+      error.message;
+
+  }
+
+}
+
+
+/* -----------------------------
+   FIND TEMPERATURE NEAREST EVENT
+----------------------------- */
+
+function temperatureForTime(eventDate) {
+
+  if (!hourlyWeather.length) {
+    return "--";
+  }
+
+  let closest = hourlyWeather[0];
+
+  hourlyWeather.forEach(item => {
+
+    if (
+      Math.abs(item.time - eventDate) <
+      Math.abs(closest.time - eventDate)
+    ) {
+      closest = item;
     }
-  </script>
+
+  });
+
+  return closest.temp + "°F";
+
+}
+
+
+/* -----------------------------
+   GOOGLE CALENDAR
+----------------------------- */
+
+async function loadCalendar(calendarId) {
+
+  const table =
+    document.getElementById("scheduleTable");
+
+  table.innerHTML = "";
+
+  try {
+
+    /*
+      Google public calendar ICS feed.
+
+      The AllOrigins service is used here so the browser
+      can read the public ICS file for this class project.
+    */
+
+    const icsURL =
+      "https://calendar.google.com/calendar/ical/" +
+      encodeURIComponent(calendarId) +
+      "/public/basic.ics";
+
+    const proxyURL =
+      "https://api.allorigins.win/raw?url=" +
+      encodeURIComponent(icsURL);
+
+    const response = await fetch(proxyURL);
+
+    if (!response.ok) {
+      throw new Error("Unable to read the public calendar.");
+    }
+
+    const text = await response.text();
+
+    const events = parseICS(text);
+
+    const today = new Date();
+
+    const todaysEvents =
+      events.filter(event =>
+        sameDay(event.start, today)
+      );
+
+    if (todaysEvents.length === 0) {
+
+      table.innerHTML =
+        "<tr><td colspan='3'>No events scheduled for today.</td></tr>";
+
+      return;
+
+    }
+
+    todaysEvents.sort(
+      (a, b) => a.start - b.start
+    );
+
+    todaysEvents.forEach(event => {
+
+      const row =
+        document.createElement("tr");
+
+      row.innerHTML = `
+        <td>${formatTime(event.start)}</td>
+        <td>${temperatureForTime(event.start)}</td>
+        <td>${escapeHTML(event.summary)}</td>
+      `;
+
+      table.appendChild(row);
+
+    });
+
+  }
+
+  catch (error) {
+
+    console.error(error);
+
+    table.innerHTML =
+      "<tr><td colspan='3'>" +
+      "Calendar could not be loaded. " +
+      "Make sure the Google Calendar is public." +
+      "</td></tr>";
+
+  }
+
+}
+
+
+/* -----------------------------
+   BASIC ICS PARSER
+----------------------------- */
+
+function parseICS(text) {
+
+  const events = [];
+
+  const blocks =
+    text.split("BEGIN:VEVENT").slice(1);
+
+  blocks.forEach(block => {
+
+    const summaryMatch =
+      block.match(/SUMMARY:(.*)/);
+
+    const startMatch =
+      block.match(/DTSTART[^:]*:(.*)/);
+
+    if (!startMatch) {
+      return;
+    }
+
+    const start =
+      parseICSDate(startMatch[1].trim());
+
+    if (!start) {
+      return;
+    }
+
+    events.push({
+
+      start: start,
+
+      summary:
+        summaryMatch
+          ? summaryMatch[1].trim()
+          : "Calendar Event"
+
+    });
+
+  });
+
+  return events;
+
+}
+
+
+/* -----------------------------
+   ICS DATE CONVERSION
+----------------------------- */
+
+function parseICSDate(value) {
+
+  if (/^\d{8}$/.test(value)) {
+
+    const year = value.substring(0,4);
+    const month = value.substring(4,6);
+    const day = value.substring(6,8);
+
+    return new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day)
+    );
+
+  }
+
+  const match =
+    value.match(
+      /(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?/
+    );
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6] || 0);
+
+  if (match[7] === "Z") {
+
+    return new Date(
+      Date.UTC(
+        year,
+        month,
+        day,
+        hour,
+        minute,
+        second
+      )
+    );
+
+  }
+
+  return new Date(
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second
+  );
+
+}
+
+
+/* -----------------------------
+   HELPERS
+----------------------------- */
+
+function sameDay(a, b) {
+
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+
+}
+
+
+function formatTime(date) {
+
+  return date.toLocaleTimeString(
+    [],
+    {
+      hour: "numeric",
+      minute: "2-digit"
+    }
+  );
+
+}
+
+
+function escapeHTML(text) {
+
+  const div =
+    document.createElement("div");
+
+  div.textContent = text;
+
+  return div.innerHTML;
+
+}
+
+
+/* -----------------------------
+   WEATHER-ONLY SCHEDULE
+----------------------------- */
+
+function showWeatherOnly() {
+
+  const table =
+    document.getElementById("scheduleTable");
+
+  table.innerHTML = "";
+
+  const now = new Date();
+
+  const nextHours =
+    hourlyWeather.filter(
+      item => item.time >= now
+    ).slice(0,6);
+
+  if (!nextHours.length) {
+
+    table.innerHTML =
+      "<tr><td colspan='3'>No weather data available.</td></tr>";
+
+    return;
+
+  }
+
+  nextHours.forEach(item => {
+
+    const row =
+      document.createElement("tr");
+
+    row.innerHTML = `
+      <td>${formatTime(item.time)}</td>
+      <td>${item.temp}°F</td>
+      <td>No calendar event</td>
+    `;
+
+    table.appendChild(row);
+
+  });
+
+}
+
+
+/* -----------------------------
+   PAGE STARTUP
+----------------------------- */
+
+window.addEventListener("load", async () => {
+
+  const savedLocation =
+    localStorage.getItem("location") || "";
+
+  const savedCalendar =
+    localStorage.getItem("calendar") || "";
+
+  document.getElementById("location").value =
+    savedLocation;
+
+  document.getElementById("calendar").value =
+    savedCalendar;
+
+  if (savedLocation) {
+
+    await loadWeather(savedLocation);
+
+    if (savedCalendar) {
+      await loadCalendar(savedCalendar);
+    } else {
+      showWeatherOnly();
+    }
+
+  }
+
+});
+
+
+/* -----------------------------
+   SERVICE WORKER
+----------------------------- */
+
+if ("serviceWorker" in navigator) {
+
+  window.addEventListener("load", () => {
+
+    navigator.serviceWorker
+      .register("./service-worker.js")
+      .catch(error =>
+        console.error(
+          "Service worker registration failed:",
+          error
+        )
+      );
+
+  });
+
+}
+
+</script>
 
 </body>
 </html>
