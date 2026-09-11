@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Schedule</title>
+  <link rel="manifest" href="manifest.json" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 700px;
+      margin: 30px auto;
+      padding: 20px;
+      background: #f4f4f4;
+    }
+
+    h1 {
+      text-align: center;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 10px;
+    }
+
+    input, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      margin-bottom: 12px;
+      box-sizing: border-box;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>My Schedule</h1>
+
+  <div class="card">
+    <h2>Today's Weather</h2>
+    <p id="weather">Weather information will appear here.</p>
+  </div>
+
+  <div class="card">
+    <h2>Location Settings</h2>
+
+    <label for="location">ZIP Code or City</label>
+    <input id="location" type="text" placeholder="Example: 48710" />
+
+    <label for="calendar">Public Google Calendar ID</label>
+    <input id="calendar" type="text" placeholder="Enter calendar ID" />
+
+    <button onclick="saveSettings()">Save Settings</button>
+  </div>
+
+  <div class="card">
+    <h2>Schedule</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Temp</th>
+          <th>Event</th>
+        </tr>
+      </thead>
+      <tbody id="scheduleTable">
+        <tr>
+          <td>9:00 AM</td>
+          <td>--</td>
+          <td>Sample Event</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    function saveSettings() {
+      const location = document.getElementById("location").value;
+      const calendar = document.getElementById("calendar").value;
+
+      localStorage.setItem("location", location);
+      localStorage.setItem("calendar", calendar);
+
+      document.getElementById("weather").textContent =
+        "Settings saved for " + (location || "your location") + ".";
+    }
+
+    window.onload = function () {
+      document.getElementById("location").value =
+        localStorage.getItem("location") || "";
+
+      document.getElementById("calendar").value =
+        localStorage.getItem("calendar") || "";
+    };
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("service-worker.js");
+    }
+  </script>
+
+</body>
+</html>
